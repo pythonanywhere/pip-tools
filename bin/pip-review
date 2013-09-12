@@ -28,6 +28,7 @@ except ImportError:
             raise error
         return output
 
+PIP_IGNORE_FILE = u'.pipignore'
 
 check_output = partial(_check_output, shell=True)
 
@@ -131,7 +132,7 @@ def get_latest_versions(pkg_names):
     return zip(pkg_names, versions)
 
 
-def get_installed_pkgs(local=False):
+def get_installed_pkgs(ignores, local=False):
     logger = logging.getLogger(u'pip-review')
     command = 'pip freeze'
     if local:
@@ -147,9 +148,13 @@ def get_installed_pkgs(local=False):
             name = line.split('#egg=', 1)[1]
             if name.endswith('-dev'):
                 name = name[:-4]
+            if name in ignores:
+                continue
             yield name, 'dev', 'dev', True
         else:
             name, version = line.split('==')
+            if name in ignores:
+                continue
             yield name, parse_version(version), version, False
 
 
@@ -231,7 +236,9 @@ def main():
                        'Are you sure? [y/n] '):
             raise SystemExit('Quitting')
 
-    installed = list(get_installed_pkgs(local=args.local))
+    with open('.pipignore', 'r') as ignore_file:
+        ignores = set([x.strip() for x in ignore_file.readlines()])
+    installed = list(get_installed_pkgs(ignores, local=args.local))
     lookup_on_pypi = [name for name, _, _, editable in installed
                       if not editable or args.editables]
     latest_versions = dict(get_latest_versions(lookup_on_pypi))
